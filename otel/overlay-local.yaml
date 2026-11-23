@@ -1,0 +1,15 @@
+# Overlay for docker-compose: no Tempo, Loki, Kafka, or DCGM on a laptop, so those are removed.
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/tenant_from_header, transform/tenant_default, filter/drop_health, batch]
+      exporters: [spanmetrics, debug]
+    metrics:
+      receivers: [otlp, spanmetrics]
+      processors: [memory_limiter, resource/tenant_from_header, transform/tenant_default, batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/tenant_from_header, transform/tenant_default, batch]
+      exporters: [debug]

@@ -1,0 +1,17 @@
+# Overlay: also publish all three signals to Kafka (for a durable buffer or a second consumer).
+# Lists are replaced on merge, so each pipeline is restated in full.
+#   otelcol-contrib validate --config=otel/collector.yaml --config=otel/overlay-kafka.yaml
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/tenant_from_header, transform/tenant_default, filter/drop_health, batch]
+      exporters: [otlp/tempo, spanmetrics, kafka/traces]
+    metrics:
+      receivers: [otlp, prometheus/dcgm, spanmetrics]
+      processors: [memory_limiter, resource/tenant_from_header, transform/tenant_default, batch]
+      exporters: [prometheus, kafka/metrics]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/tenant_from_header, transform/tenant_default, batch]
+      exporters: [otlphttp/loki, kafka/logs]

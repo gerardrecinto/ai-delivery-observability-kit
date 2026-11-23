@@ -1,0 +1,149 @@
+# Multi-tenant OpenTelemetry Collector (contrib distribution).
+#
+# Tenant identity: clients send OTLP with an `x-tenant-id` header (or already set the
+# `tenant.id` resource attribute). The header is copied onto the resource as `tenant.id`
+# at ingest, so every span, metric, and log record carries it. Anything without a tenant
+# is stamped `unknown` so it stays visible instead of being dropped.
+#
+# Trust note: the header is only as trustworthy as whatever sits in front of the collector.
+# In a real deployment the gateway should authenticate the caller and set this header itself.
+#
+# Validate: otelcol-contrib validate --config=otel/collector.yaml
+# Kafka option: add --config=otel/overlay-kafka.yaml
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        include_metadata: true # exposes request headers to processors via context
+      http:
+        endpoint: 0.0.0.0:4318
+        include_metadata: true
+
+  # GPU telemetry from NVIDIA DCGM exporter. Metric names such as DCGM_FI_DEV_GPU_UTIL
+  # and DCGM_FI_DEV_FB_USED come through unchanged.
+  prometheus/dcgm:
+    config:
+      scrape_configs:
+        - job_name: dcgm-exporter
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["dcgm-exporter:9400"]
+          # On Kubernetes use kubernetes_sd_configs with a pod role instead of static targets.
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 20
+
+  # Step 1: copy the tenant header onto the resource. `insert` never overwrites an
+  # attribute the client already set.
+  resource/tenant_from_header:
+    attributes:
+      - key: tenant.id
+        from_context: x-tenant-id
+        action: insert
+
+  # Step 2: default for anything still unset (no header, no attribute).
+  transform/tenant_default:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["tenant.id"], "unknown") where attributes["tenant.id"] == nil
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["tenant.id"], "unknown") where attributes["tenant.id"] == nil
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["tenant.id"], "unknown") where attributes["tenant.id"] == nil
+
+  # Drop health-check noise before it costs storage.
+  filter/drop_health:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["http.target"] == "/healthz"'
+        - 'attributes["url.path"] == "/healthz"'
+
+  batch:
+    send_batch_size: 8192
+    timeout: 5s
+
+connectors:
+  # Request rate and latency per tenant, derived from traces.
+  spanmetrics:
+    dimensions:
+      - name: tenant.id
+    histogram:
+      explicit:
+        buckets: [50ms, 100ms, 250ms, 500ms, 1s, 2s, 5s, 10s]
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true # turns resource attribute tenant.id into the label tenant_id
+
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # Loki 3.x accepts OTLP natively on /otlp.
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+  # One exporter per signal so each gets its own topic.
+  kafka/traces:
+    brokers: ["kafka:9092"]
+    protocol_version: 2.6.0
+    topic: otlp_spans
+  kafka/metrics:
+    brokers: ["kafka:9092"]
+    protocol_version: 2.6.0
+    topic: otlp_metrics
+  kafka/logs:
+    brokers: ["kafka:9092"]
+    protocol_version: 2.6.0
+    topic: otlp_logs
+
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors:
+        - memory_limiter
+        - resource/tenant_from_header
+        - transform/tenant_default
+        - filter/drop_health
+        - batch
+      exporters: [otlp/tempo, spanmetrics, debug]
+    metrics:
+      receivers: [otlp, prometheus/dcgm, spanmetrics]
+      processors:
+        - memory_limiter
+        - resource/tenant_from_header
+        - transform/tenant_default
+        - batch
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors:
+        - memory_limiter
+        - resource/tenant_from_header
+        - transform/tenant_default
+        - batch
+      exporters: [otlphttp/loki]
