@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vllm.name" . }}
+  labels:
+    {{- include "vllm.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vllm.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vllm.labels" . | nindent 8 }}
+      {{- if .Values.metrics.scrapeAnnotations }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.service.port | quote }}
+        prometheus.io/path: /metrics
+      {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: vllm
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --model={{ .Values.model.path }}
+            - --served-model-name={{ .Values.model.name }}
+            - --max-model-len={{ .Values.model.maxModelLen }}
+            - --gpu-memory-utilization={{ .Values.model.gpuMemoryUtilization }}
+            - --dtype={{ .Values.model.dtype }}
+            - --port={{ .Values.service.port }}
+            {{- range .Values.extraArgs }}
+            - {{ . }}
+            {{- end }}
+          env:
+            - name: HF_HUB_OFFLINE
+              value: "1"
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 300
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: {{ .Values.modelsVolume.existingClaim }}
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

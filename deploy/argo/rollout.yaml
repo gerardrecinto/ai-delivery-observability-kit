@@ -1,0 +1,50 @@
+# Canary rollout for the inference service. Illustrative: not applied to any cluster here.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: vllm
+  labels:
+    tenant: shared-platform
+spec:
+  replicas: 4
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: vllm
+  strategy:
+    canary:
+      # Inference replicas are expensive; keep the canary small and slow.
+      maxSurge: 1
+      maxUnavailable: 0
+      steps:
+        - setWeight: 10
+        - pause: {duration: 5m}
+        - analysis:
+            templates:
+              - templateName: inference-canary-verification
+            args:
+              - name: service
+                value: vllm
+        - setWeight: 50
+        - pause: {duration: 10m}
+        - analysis:
+            templates:
+              - templateName: inference-canary-verification
+            args:
+              - name: service
+                value: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+        tenant: shared-platform
+    spec:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.6.4.post1
+          args: ["--model=/models/llama-3.1-8b-instruct", "--port=8000"]
+          ports:
+            - containerPort: 8000
+          resources:
+            limits:
+              nvidia.com/gpu: 1

@@ -1,0 +1,60 @@
+# Gates the canary on latency, error rate, cost per 1k tokens, and an eval score.
+# The eval score is exported as a Prometheus gauge (aidelivery_eval_score) by whatever runs
+# the eval job, for example a CronJob that pushes to a Pushgateway. This repo does not ship
+# that job; `aidelivery gate` does the same check offline from a JSON file.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: inference-canary-verification
+spec:
+  args:
+    - name: service
+    - name: prometheus
+      value: http://prometheus.monitoring.svc:9090
+  metrics:
+    - name: p95-latency-seconds
+      interval: 1m
+      count: 5
+      failureLimit: 1
+      successCondition: result[0] <= 2.0
+      provider:
+        prometheus:
+          address: "{{args.prometheus}}"
+          query: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(aidelivery_request_duration_seconds_bucket{job="{{args.service}}"}[5m])))
+
+    - name: error-rate
+      interval: 1m
+      count: 5
+      failureLimit: 1
+      successCondition: result[0] <= 0.02
+      provider:
+        prometheus:
+          address: "{{args.prometheus}}"
+          query: |
+            sum(rate(aidelivery_requests_total{job="{{args.service}}",status=~"5.."}[5m]))
+            / sum(rate(aidelivery_requests_total{job="{{args.service}}"}[5m]))
+
+    - name: cost-per-1k-tokens-usd
+      interval: 1m
+      count: 5
+      failureLimit: 1
+      successCondition: result[0] <= 0.01
+      provider:
+        prometheus:
+          address: "{{args.prometheus}}"
+          query: |
+            sum(rate(aidelivery_cost_usd_total{job="{{args.service}}"}[10m]))
+            / (sum(rate(aidelivery_tokens_total{job="{{args.service}}"}[10m])) / 1000)
+
+    - name: eval-score
+      interval: 1m
+      count: 1
+      failureLimit: 0
+      successCondition: result[0] >= 0.85
+      provider:
+        prometheus:
+          address: "{{args.prometheus}}"
+          query: |
+            min(aidelivery_eval_score{job="{{args.service}}"})

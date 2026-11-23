@@ -1,0 +1,104 @@
+# Envoy front door for inference traffic: requires a tenant header, applies per-tenant local rate
+# limits, and keeps streaming (SSE) responses alive. Backend is a vLLM-compatible service.
+static_resources:
+  listeners:
+    - name: ingress
+      address:
+        socket_address: {address: 0.0.0.0, port_value: 8080}
+      per_connection_buffer_limit_bytes: 1048576
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ingress
+                codec_type: AUTO
+                # Streaming safety: a long generation must not be cut by an idle timer.
+                stream_idle_timeout: 600s
+                request_timeout: 0s
+                common_http_protocol_options:
+                  idle_timeout: 900s
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                      log_format:
+                        json_format:
+                          tenant: "%REQ(X-TENANT-ID)%"
+                          status: "%RESPONSE_CODE%"
+                          duration_ms: "%DURATION%"
+                          first_byte_ms: "%RESPONSE_DURATION%"
+                          flags: "%RESPONSE_FLAGS%"
+                route_config:
+                  name: inference
+                  virtual_hosts:
+                    - name: inference
+                      domains: ["*"]
+                      routes:
+                        - match:
+                            prefix: /v1/
+                            headers:
+                              - name: x-tenant-id
+                                present_match: true
+                          route:
+                            cluster: inference_backend
+                            # 0s disables the route timeout so generation length is not capped here.
+                            timeout: 0s
+                            idle_timeout: 600s
+                          typed_per_filter_config:
+                            envoy.filters.http.local_ratelimit:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                              stat_prefix: tenant_rate_limit
+                              token_bucket: {max_tokens: 20, tokens_per_fill: 10, fill_interval: 1s}
+                              filter_enabled:
+                                runtime_key: local_rate_limit_enabled
+                                default_value: {numerator: 100, denominator: HUNDRED}
+                              filter_enforced:
+                                runtime_key: local_rate_limit_enforced
+                                default_value: {numerator: 100, denominator: HUNDRED}
+                              response_headers_to_add:
+                                - append_action: OVERWRITE_IF_EXISTS_OR_ADD
+                                  header: {key: x-local-rate-limit, value: "true"}
+                              # Per-tenant buckets. Tenants without an entry share the bucket above.
+                              descriptors:
+                                - entries: [{key: tenant, value: acme}]
+                                  token_bucket: {max_tokens: 100, tokens_per_fill: 50, fill_interval: 1s}
+                                - entries: [{key: tenant, value: batch-jobs}]
+                                  token_bucket: {max_tokens: 5, tokens_per_fill: 1, fill_interval: 1s}
+                              rate_limits:
+                                - actions:
+                                    - request_headers:
+                                        header_name: x-tenant-id
+                                        descriptor_key: tenant
+                        - match: {prefix: /}
+                          direct_response:
+                            status: 401
+                            body: {inline_string: "missing x-tenant-id or unsupported path\n"}
+                http_filters:
+                  - name: envoy.filters.http.local_ratelimit
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                      stat_prefix: http_local_rate_limiter
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+    - name: inference_backend
+      type: STRICT_DNS
+      connect_timeout: 2s
+      lb_policy: LEAST_REQUEST
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http_protocol_options: {}
+      load_assignment:
+        cluster_name: inference_backend
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: {address: vllm-serving, port_value: 8000}
+admin:
+  address:
+    socket_address: {address: 127.0.0.1, port_value: 9901}

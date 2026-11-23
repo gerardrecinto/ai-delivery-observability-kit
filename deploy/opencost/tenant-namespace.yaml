@@ -1,0 +1,11 @@
+# Label convention for per-tenant cost attribution in OpenCost. See docs/COST_ATTRIBUTION.md.
+# OpenCost aggregates by namespace label or pod label, so tenant identity lives on both.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-acme
+  labels:
+    tenant: acme
+    team: search
+    cost-center: cc-1234     # placeholder
+    workload-class: inference

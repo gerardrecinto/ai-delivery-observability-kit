@@ -1,0 +1,65 @@
+groups:
+  - name: inference-slo
+    rules:
+      - alert: InferenceHighP95Latency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, tenant) (rate(aidelivery_request_duration_seconds_bucket[5m]))) > 2
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 latency above 2s for tenant {{ $labels.tenant }}"
+      - alert: InferenceHighErrorRate
+        expr: |
+          sum by (tenant) (rate(aidelivery_requests_total{status=~"5.."}[5m]))
+          / sum by (tenant) (rate(aidelivery_requests_total[5m])) > 0.02
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: "5xx rate above 2% for tenant {{ $labels.tenant }}"
+      - alert: TenantRateLimited
+        expr: sum by (tenant) (rate(aidelivery_rate_limited_total[5m])) > 1
+        for: 10m
+        labels: {severity: info}
+        annotations:
+          summary: "Tenant {{ $labels.tenant }} is being throttled"
+
+  - name: inference-cost
+    rules:
+      - alert: TenantBudgetLow
+        expr: aidelivery_budget_remaining_usd < 10
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Tenant {{ $labels.tenant }} has under 10 USD of budget left"
+      - alert: CostPer1kTokensHigh
+        expr: |
+          sum by (tenant) (rate(aidelivery_cost_usd_total[15m]))
+          / (sum by (tenant) (rate(aidelivery_tokens_total[15m])) / 1000) > 0.01
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Cost per 1k tokens above 0.01 USD for tenant {{ $labels.tenant }}"
+
+  - name: gpu-health
+    rules:
+      - alert: GpuUtilizationLowWhileServing
+        expr: |
+          avg by (Hostname) (DCGM_FI_DEV_GPU_UTIL) < 10
+          and on () sum(rate(aidelivery_requests_total[5m])) > 1
+        for: 15m
+        labels: {severity: info}
+        annotations:
+          summary: "GPUs on {{ $labels.Hostname }} are idle while traffic is flowing"
+      - alert: GpuMemoryNearFull
+        expr: |
+          DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE) > 0.95
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "GPU {{ $labels.gpu }} on {{ $labels.Hostname }} memory above 95%"
+      - alert: GpuXidErrors
+        expr: increase(DCGM_FI_DEV_XID_ERRORS[10m]) > 0
+        labels: {severity: page}
+        annotations:
+          summary: "XID error on GPU {{ $labels.gpu }} on {{ $labels.Hostname }}"

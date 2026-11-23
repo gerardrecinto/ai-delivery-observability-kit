@@ -1,0 +1,50 @@
+# Example values for a vLLM deployment. Nothing here has been run on a GPU.
+image:
+  repository: vllm/vllm-openai
+  tag: v0.6.4.post1
+  pullPolicy: IfNotPresent
+  # Air-gapped: point at an internal registry mirror, for example harbor.example.internal/mirror/vllm/vllm-openai
+  pullSecrets: []
+
+model:
+  # Served from a pre-populated volume or an internal mirror, not pulled from the public hub at start.
+  name: meta-llama/Llama-3.1-8B-Instruct
+  path: /models/llama-3.1-8b-instruct
+  maxModelLen: 8192
+  gpuMemoryUtilization: 0.90
+  dtype: auto
+
+replicaCount: 1
+
+tenant: shared-platform   # used for OpenCost attribution labels
+team: ml-platform
+costCenter: cc-0000       # placeholder
+
+resources:
+  limits:
+    nvidia.com/gpu: 1
+    memory: 32Gi
+  requests:
+    cpu: "4"
+    memory: 24Gi
+    nvidia.com/gpu: 1
+
+nodeSelector:
+  nvidia.com/gpu.present: "true"
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+modelsVolume:
+  existingClaim: model-store
+
+service:
+  port: 8000
+
+# vLLM exposes Prometheus metrics at /metrics on the serving port.
+metrics:
+  scrapeAnnotations: true
+
+extraArgs: []
