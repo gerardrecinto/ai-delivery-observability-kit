@@ -80,7 +80,7 @@ jobs:
   security:
     runs-on: ubuntu-latest
     env:
-      TRIVY: aquasec/trivy:0.57.1
+      TRIVY: aquasec/trivy:0.74.0
     steps:
       - uses: actions/checkout@v4
       - name: Trivy filesystem scan (vulnerabilities, secrets, misconfiguration)
