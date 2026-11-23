@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Delivery Observability Kit | Per-tenant cost, quotas and a canary gate for AI inference</title>
+<meta name="description" content="A reference kit for shipping and observing AI inference services: multi-tenant OpenTelemetry Collector, per-tenant cost attribution and quotas, and a promote or rollback canary gate. Runs on a laptop against a mock server.">
+<link rel="canonical" href="https://gerardrecinto.github.io/ai-delivery-observability-kit/">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#07090e" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f5f8" media="(prefers-color-scheme: light)">
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://gerardrecinto.github.io/ai-delivery-observability-kit/">
+<meta property="og:title" content="AI Delivery Observability Kit">
+<meta property="og:description" content="Per-tenant cost attribution, quotas and a promote or rollback canary gate for AI inference. A reference kit that runs on a laptop against a mock server.">
+<meta property="og:image" content="https://gerardrecinto.github.io/ai-delivery-observability-kit/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="AI Delivery Observability Kit: request, Envoy, inference server, OpenTelemetry Collector, Prometheus, canary gate, promote or rollback.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="AI Delivery Observability Kit">
+<meta name="twitter:description" content="Per-tenant cost attribution, quotas and a promote or rollback canary gate for AI inference. A reference kit that runs on a laptop against a mock server.">
+<meta name="twitter:image" content="https://gerardrecinto.github.io/ai-delivery-observability-kit/og-image.png">
+<meta name="twitter:image:alt" content="AI Delivery Observability Kit: request, Envoy, inference server, OpenTelemetry Collector, Prometheus, canary gate, promote or rollback.">
+
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<link rel="stylesheet" href="./styles.css">
+<script>
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.documentElement.classList.add('js-motion');
+    // If the main script never runs, show everything instead of leaving content hidden.
+    setTimeout(function () { if (!document.documentElement.hasAttribute('data-ready')) document.documentElement.classList.remove('js-motion'); }, 3000);
+  }
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": "ai-delivery-observability-kit",
+  "description": "A reference kit for shipping and observing AI inference services: per-tenant cost attribution and quotas, a canary verification gate, a multi-tenant OpenTelemetry Collector config, and deployment manifests, all runnable on a laptop against a mock server.",
+  "codeRepository": "https://github.com/gerardrecinto/ai-delivery-observability-kit",
+  "url": "https://gerardrecinto.github.io/ai-delivery-observability-kit/",
+  "programmingLanguage": "Python",
+  "license": "https://opensource.org/licenses/MIT",
+  "author": { "@type": "Person", "name": "Gerard Recinto", "url": "https://github.com/gerardrecinto" }
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+<div class="progress" aria-hidden="true"></div>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="AI Delivery Observability Kit, top of page">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#0d1220"/><path d="M6 20h5l3-9 4 14 3-8h5" fill="none" stroke="#34d399" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ai-delivery-observability-kit
+    </a>
+    <nav class="main" aria-label="Primary">
+      <a href="#pipeline">Pipeline</a>
+      <a href="#gate-demo">Gate demo</a>
+      <a href="#features">Features</a>
+      <a href="#quick-start">Quick start</a>
+      <a href="#validation">Validation</a>
+      <a class="btn primary" href="https://github.com/gerardrecinto/ai-delivery-observability-kit">GitHub</a>
+    </nav>
+    <details class="menu">
+      <summary>Menu</summary>
+      <div class="sheet">
+        <a href="#pipeline">Pipeline</a>
+        <a href="#gate-demo">Gate demo</a>
+        <a href="#features">Features</a>
+        <a href="#quick-start">Quick start</a>
+        <a href="#validation">Validation</a>
+        <a href="https://github.com/gerardrecinto/ai-delivery-observability-kit">GitHub</a>
+      </div>
+    </details>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap" id="top">
+
+  <section class="hero" aria-labelledby="h1">
+    <div class="grid">
+      <div class="reveal">
+        <p class="eyebrow">Reference kit &middot; runs on a laptop &middot; mock server</p>
+        <h1 id="h1">Know what each tenant costs, and <em>gate every canary</em> before it ships.</h1>
+        <p class="sub">A reference kit for shipping and observing AI inference services: per-tenant cost attribution and quotas, a multi-tenant OpenTelemetry Collector, and a canary gate that decides promote or rollback.</p>
+        <p class="aud">Built for platform and SRE engineers who run, or are about to run, shared LLM inference and want cost, limits and rollout checks worked out before any GPUs are involved.</p>
+        <div class="cta">
+          <a class="btn primary" href="#gate-demo">Try the gate in your browser</a>
+          <a class="btn" href="https://github.com/gerardrecinto/ai-delivery-observability-kit">View on GitHub</a>
+        </div>
+        <ul class="chips" aria-label="Facts from the repository">
+          <li>Python</li><li>MIT license</li><li>35 tests pass locally</li><li>No GPU needed</li>
+        </ul>
+      </div>
+      <figure class="termcard reveal" style="--i:2; margin:0">
+        <div class="bar"><i></i><i></i><i></i><span>scripts/canary_smoke.sh 0.5 (from the README)</span></div>
+<pre><span class="pass">PASS</span> request_volume: 40 (need &gt;= 20)
+<span class="pass">PASS</span> p95_latency_seconds: 0.095 (need &lt;= 2)
+<span class="fail">FAIL</span> error_rate: 0.5 (need &lt;= 0.02)
+<span class="pass">PASS</span> cost_per_1k_tokens_usd: 0.00333 (need &lt;= 0.01)
+<span class="pass">PASS</span> eval_score: 0.93 (need &gt;= 0.85)
+<span class="pass">PASS</span> hallucination_rate: 0.02 (need &lt;= 0.05)
+<span class="fail">DECISION: ROLLBACK</span>        (exit 1)</pre>
+      </figure>
+    </div>
+  </section>
+
+  <section class="panel reveal" id="pipeline" aria-labelledby="h-pipe">
+    <p class="eyebrow">How it fits together</p>
+    <h2 id="h-pipe">From request to promote or rollback</h2>
+    <p class="lede">Three paths share one tenant identity: the <code>x-tenant-id</code> header at the edge, the <code>tenant.id</code> resource attribute in OpenTelemetry, and the <code>tenant</code> label in Prometheus. Moving dots show direction only.</p>
+    <div class="lanes">
+      <section class="lane" aria-labelledby="l1">
+        <h3 id="l1"><b>1</b>Request path</h3>
+        <ol class="flow">
+          <li style="--i:0"><strong>Client</strong><span>Sends the <code>x-tenant-id</code> header with each request.</span></li>
+          <li style="--i:1"><strong>Envoy</strong><span>Requires the tenant header (otherwise 401), applies per-tenant local rate limits, keeps streaming alive.</span></li>
+          <li style="--i:2"><strong>Inference server</strong><span>vLLM in <code>deploy/</code>, the mock server locally. Emits <code>/metrics</code> and OTLP spans.</span></li>
+        </ol>
+      </section>
+      <section class="lane" aria-labelledby="l2">
+        <h3 id="l2"><b>2</b>Telemetry path</h3>
+        <ol class="flow">
+          <li style="--i:0"><strong>Inference server</strong><span>Tokens, GPU seconds, cost and latency, labeled by tenant.</span></li>
+          <li style="--i:1"><strong>OTel Collector</strong><span>Tenant stamped: copies <code>x-tenant-id</code> to <code>tenant.id</code>, defaults to <code>unknown</code>.</span></li>
+          <li style="--i:2"><strong>Prometheus</strong><span>Scrapes the collector's exporter and the server's <code>/metrics</code>.</span></li>
+          <li style="--i:3"><strong>Grafana and alerts</strong><span>Dashboard JSON and 8 alert rules in <code>deploy/</code>.</span></li>
+        </ol>
+      </section>
+      <section class="lane" aria-labelledby="l3">
+        <h3 id="l3"><b>3</b>Verification path</h3>
+        <ol class="flow">
+          <li style="--i:0"><strong>Prometheus metrics</strong><span>p95 latency, error rate, cost per 1k tokens.</span></li>
+          <li style="--i:1"><strong>Eval score</strong><span>Read from a JSON file. No eval harness is included.</span></li>
+          <li class="gate" style="--i:2"><strong>Canary gate</strong><span><code>aidelivery gate</code> in CI (exit 0 promotes, 1 rolls back), or an Argo Rollouts AnalysisTemplate. Missing data fails closed.</span></li>
+          <li style="--i:3"><div class="fork"><span class="tag ok">PROMOTE</span><span class="tag bad">ROLLBACK</span></div></li>
+        </ol>
+      </section>
+    </div>
+    <p class="note">The Argo Rollout and AnalysisTemplate manifests passed <code>kubeconform</code> but were never applied to a cluster. See the validation table below.</p>
+  </section>
+
+  <section class="panel reveal" id="gate-demo" aria-labelledby="h-demo">
+    <p class="eyebrow">Interactive</p>
+    <h2 id="h-demo">Canary gate, in your browser</h2>
+    <p class="lede">Move the sliders to see the decision. This is a browser simulation of the repo's rules: it applies the same thresholds as <code>aidelivery gate</code>, defined in <code>src/aidelivery/gate.py</code> (the <code>Thresholds</code> defaults) and <code>config/thresholds.json</code>. It does not read Prometheus. Request volume (100) and hallucination rate (0.02) are held at the values of the repo's healthy fixture.</p>
+    <noscript><p class="disclaimer">The sliders need JavaScript. Without it, the README output above shows a real rollback and the commands below run the real gate.</p></noscript>
+
+    <div class="demo" id="demo" data-source="src/aidelivery/gate.py">
+      <div class="controls">
+        <div class="presets" role="group" aria-label="Presets from the repo test fixtures">
+          <button class="btn" type="button" data-preset="healthy" aria-pressed="true">Healthy</button>
+          <button class="btn" type="button" data-preset="slow" aria-pressed="false">Slow</button>
+          <button class="btn" type="button" data-preset="errors" aria-pressed="false">Erroring</button>
+          <button class="btn" type="button" data-preset="costly" aria-pressed="false">Costly</button>
+          <button class="btn" type="button" data-preset="badeval" aria-pressed="false">Bad eval</button>
+        </div>
+        <div class="field">
+          <div class="row"><label for="s-err">Error rate</label><output id="o-err" for="s-err">0.0%</output></div>
+          <div class="range"><span class="tick" style="--p:0.1" data-l="limit 2%"></span><input id="s-err" type="range" min="0" max="0.2" step="0.001" value="0" data-key="err"></div>
+          <p class="hint">5xx responses divided by all requests. Passes at 2% or lower.</p>
+        </div>
+        <div class="field">
+          <div class="row"><label for="s-p95">p95 latency</label><output id="o-p95" for="s-p95">0.375 s</output></div>
+          <div class="range"><span class="tick" style="--p:0.3333" data-l="limit 2 s"></span><input id="s-p95" type="range" min="0" max="6" step="0.005" value="0.375" data-key="p95"></div>
+          <p class="hint">95th percentile request duration. Passes at 2 seconds or lower.</p>
+        </div>
+        <div class="field">
+          <div class="row"><label for="s-cost">Cost per 1k tokens</label><output id="o-cost" for="s-cost">$0.0020</output></div>
+          <div class="range"><span class="tick" style="--p:0.1667" data-l="limit $0.01"></span><input id="s-cost" type="range" min="0" max="0.06" step="0.0005" value="0.002" data-key="cost"></div>
+          <p class="hint">Rate card cost divided by tokens, per 1,000. Passes at $0.01 or lower.</p>
+        </div>
+        <div class="field">
+          <div class="row"><label for="s-eval">Eval score</label><output id="o-eval" for="s-eval">0.93</output></div>
+          <div class="range"><span class="tick right" style="--p:0.85" data-l="min 0.85"></span><input id="s-eval" type="range" min="0" max="1" step="0.01" value="0.93" data-key="eval"></div>
+          <p class="hint">Offline eval score. Passes at 0.85 or higher.</p>
+        </div>
+      </div>
+
+      <div class="result" aria-labelledby="h-res">
+        <h3 id="h-res" class="sr-only">Gate result</h3>
+        <div class="verdict">
+          <span class="big promote" id="verdict">PROMOTE</span>
+          <span class="exit" id="exitcode">exit 0</span>
+        </div>
+        <p class="reasons" id="reasons">All six checks pass.</p>
+        <ul class="checks" id="checks">
+          <li><span class="s p">PASS</span><span>request_volume: 100 (need &gt;= 20)</span></li>
+          <li><span class="s p">PASS</span><span>p95_latency_seconds: 0.375 (need &lt;= 2)</span></li>
+          <li><span class="s p">PASS</span><span>error_rate: 0 (need &lt;= 0.02)</span></li>
+          <li><span class="s p">PASS</span><span>cost_per_1k_tokens_usd: 0.002 (need &lt;= 0.01)</span></li>
+          <li><span class="s p">PASS</span><span>eval_score: 0.93 (need &gt;= 0.85)</span></li>
+          <li><span class="s p">PASS</span><span>hallucination_rate: 0.02 (need &lt;= 0.05)</span></li>
+        </ul>
+        <div class="sr-only" id="live" role="status" aria-live="polite" aria-atomic="true">Decision: PROMOTE. All six checks pass.</div>
+        <p class="disclaimer">Browser simulation of the repo's rules, not the Python program. Presets use the values the Python gate computes from <code>tests/fixtures/</code>. A check passes when its value is at or inside the limit. The Bad eval preset uses the fixture's score of 0.70; that fixture's hallucination rate (0.12) is not modeled here.</p>
+      </div>
+    </div>
+
+    <div class="offline">
+      <p class="lede">Run the real gate offline against the same fixtures:</p>
+      <div class="cmd">
+        <div class="head"><span>shell</span><button class="btn copy" type="button" data-copy-target="cmd-gate">Copy</button></div>
+<pre id="cmd-gate">aidelivery gate --metrics tests/fixtures/canary_good.prom --eval tests/fixtures/eval_good.json</pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel reveal" id="features" aria-labelledby="h-feat">
+    <p class="eyebrow">What is in the repo</p>
+    <h2 id="h-feat">Features</h2>
+    <div class="cards">
+      <article class="card reveal" style="--i:0"><div class="ico" aria-hidden="true">01</div><h3>Multi-tenant OTel Collector</h3><p>Copies the <code>x-tenant-id</code> header onto every span, metric and log as <code>tenant.id</code>. Anything without a tenant is stamped <code>unknown</code> so it stays visible. Per-tenant span metrics via the spanmetrics connector.</p><span class="src">otel/collector.yaml</span></article>
+      <article class="card reveal" style="--i:1"><div class="ico" aria-hidden="true">02</div><h3>Per-tenant cost attribution</h3><p>Tokens and GPU seconds priced from a rate card, exported as <code>aidelivery_cost_usd_total</code> by tenant and model. Rate card prices are placeholders.</p><span class="src">src/aidelivery/cost.py, config/ratecard.json</span></article>
+      <article class="card reveal" style="--i:2"><div class="ico" aria-hidden="true">03</div><h3>Quotas and budgets</h3><p>Thread-safe token bucket per tenant (tested with 200 concurrent callers) and per-tenant budgets. A spent budget makes the mock server answer 429. Envoy adds a coarse per-instance limit in front.</p><span class="src">src/aidelivery/quota.py, deploy/envoy/envoy.yaml</span></article>
+      <article class="card reveal" style="--i:3"><div class="ico" aria-hidden="true">04</div><h3>Canary gate</h3><p>Six checks: request volume, p95 latency, error rate, cost per 1k tokens, eval score, hallucination rate. Exit 0 promotes, 1 rolls back, 2 means bad input. Missing data fails closed.</p><span class="src">src/aidelivery/gate.py</span></article>
+      <article class="card reveal" style="--i:4"><div class="ico" aria-hidden="true">05</div><h3>Mock OpenAI-compatible server</h3><p>Serves <code>/v1/chat/completions</code> with SSE streaming, 429s and Prometheus metrics, plus OTLP spans. It runs no model. Partial streams are billed for tokens already sent.</p><span class="src">src/aidelivery/mock_server.py</span></article>
+      <article class="card reveal" style="--i:5"><div class="ico" aria-hidden="true">06</div><h3>Deploy configs</h3><p>Prometheus alert rules and scrape config, a Grafana dashboard, an Envoy config, a vLLM Helm chart, and an Argo Rollout with an AnalysisTemplate and Argo CD Application.</p><span class="src">deploy/</span></article>
+    </div>
+  </section>
+
+  <section class="panel reveal" id="quick-start" aria-labelledby="h-qs">
+    <p class="eyebrow">Quick start</p>
+    <h2 id="h-qs">Run it on a laptop</h2>
+    <p class="lede">Copied from the README. They were run on macOS with Docker Desktop, Python 3.14 locally and 3.12 in CI.</p>
+    <div class="cmd">
+      <div class="head"><span>1. Install and test</span><button class="btn copy" type="button" data-copy-target="cmd-1">Copy</button></div>
+<pre id="cmd-1">python3 -m venv .venv &amp;&amp; . .venv/bin/activate
+pip install -e ".[server,dev]"
+pytest -q</pre>
+    </div>
+    <pre class="out">35 passed, 1 warning in 0.41s</pre>
+    <div class="cmd">
+      <div class="head"><span>2. Canary gate against the mock server (half of requests fail)</span><button class="btn copy" type="button" data-copy-target="cmd-2">Copy</button></div>
+<pre id="cmd-2">scripts/canary_smoke.sh 0.5</pre>
+    </div>
+    <p>Exit code 0 means promote, 1 means rollback. <code>scripts/canary_smoke.sh 0</code> ends in <code>DECISION: PROMOTE</code>. The eval score comes from a fixture JSON file, not from a real eval run.</p>
+    <div class="cmd">
+      <div class="head"><span>3. Local stack: mock server, collector, Prometheus, Grafana</span><button class="btn copy" type="button" data-copy-target="cmd-3">Copy</button></div>
+<pre id="cmd-3">docker compose up -d --build
+curl -s localhost:8000/v1/chat/completions -H 'X-Tenant-ID: acme' -H 'content-type: application/json' \
+  -d '{"model":"mock-model","messages":[{"role":"user","content":"hello"}]}'</pre>
+    </div>
+    <pre class="out">{"id":"chatcmpl-2c7a81926f9c","object":"chat.completion","model":"mock-model","choices":[{"index":0,"message":{"role":"assistant","content":"This is a mock completion from the aidelivery mock server. No model is running."},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":14,"total_tokens":15}}</pre>
+    <div class="cmd">
+      <div class="head"><span>4. Query per-tenant requests in Prometheus</span><button class="btn copy" type="button" data-copy-target="cmd-4">Copy</button></div>
+<pre id="cmd-4">curl -s localhost:9090/api/v1/query --data-urlencode 'query=sum by (tenant) (aidelivery_requests_total)'</pre>
+    </div>
+    <p>Grafana is at <code>http://localhost:3000</code> (anonymous viewer). Panels that use DCGM metric names stay empty locally because there is no GPU exporter.</p>
+    <div class="sr-only" id="copy-status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel reveal" id="validation" aria-labelledby="h-val">
+    <p class="eyebrow">Honest status</p>
+    <h2 id="h-val">Validated vs not validated</h2>
+    <p class="lede">The inference server in this repo is a mock. It is not vLLM or Triton and it runs no model. Nothing here has been run on a GPU or a real cluster. Rate card prices are placeholders and no benchmark or performance numbers are claimed.</p>
+    <div class="honest" aria-label="Not run">
+      <div><strong>No GPUs, DCGM, vLLM or Triton.</strong> Not run.</div>
+      <div><strong>No real cluster.</strong> No Kubernetes, Argo CD or Argo Rollouts controller was run.</div>
+      <div><strong>Eval scores are fixtures.</strong> Read from a JSON file, no eval harness.</div>
+    </div>
+    <div class="tablewrap" tabindex="0" role="region" aria-label="Validated versus not validated table">
+      <table>
+        <thead><tr><th scope="col">Item</th><th scope="col">Status</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Cost attribution, rate card, budgets, token bucket (including 200-thread contention)</th><td><span class="st run">Tested</span>Unit tested, passing</td></tr>
+          <tr><th scope="row">Gate CLI thresholds, exit codes, missing-data handling, fixtures</th><td><span class="st run">Tested</span>Unit tested, passing</td></tr>
+          <tr><th scope="row">License check</th><td><span class="st run">Tested</span>Unit tested, passing</td></tr>
+          <tr><th scope="row">Mock server SSE streaming, 429s, metrics</th><td><span class="st run">Tested</span>Tested with FastAPI test client and with curl against compose</td></tr>
+          <tr><th scope="row">Collector config (base, Kafka overlay, local overlay)</th><td><span class="st run">Run</span><code>otelcol validate</code> passed; local overlay run in compose, tenant header stamping observed</td></tr>
+          <tr><th scope="row">Prometheus scraping the mock server and collector, query returns data</th><td><span class="st run">Run</span>Run locally</td></tr>
+          <tr><th scope="row">Grafana dashboard loads via provisioning</th><td><span class="st run">Run</span>Run locally, dashboard found through the API; panels not inspected visually</td></tr>
+          <tr><th scope="row">Alert rules</th><td><span class="st val">Validated</span><code>promtool check rules</code> passed; rules never fired</td></tr>
+          <tr><th scope="row">Envoy config</th><td><span class="st val">Validated</span><code>envoy --mode validate</code> passed; no traffic sent through Envoy</td></tr>
+          <tr><th scope="row">Helm chart</th><td><span class="st val">Validated</span><code>helm lint</code>, <code>helm template</code>, <code>kubeconform</code> passed; never installed</td></tr>
+          <tr><th scope="row">Argo Rollout, AnalysisTemplate, Application</th><td><span class="st val">Validated</span><code>kubeconform</code> against the public CRD schema catalog passed; never applied</td></tr>
+          <tr><th scope="row">Trivy fs and config scans, CycloneDX SBOM</th><td><span class="st run">Run</span>Run locally with no HIGH or CRITICAL findings</td></tr>
+          <tr><th scope="row">CI workflows</th><td><span class="st val">See Actions</span>See the Actions tab for current status</td></tr>
+          <tr><th scope="row">Real GPUs, DCGM exporter, vLLM, Triton</th><td><span class="st no">Not run</span>Not run</td></tr>
+          <tr><th scope="row">Real Kubernetes cluster, Argo CD, Argo Rollouts controller</th><td><span class="st no">Not run</span>Not run</td></tr>
+          <tr><th scope="row">Tempo, Loki, Kafka exporters</th><td><span class="st val">Validated</span>Configured and validated only; no backends were started</td></tr>
+          <tr><th scope="row">OpenCost</th><td><span class="st no">Not run</span>Label conventions only; not deployed</td></tr>
+          <tr><th scope="row">Harbor, MLflow, HF mirror, image signing</th><td><span class="st no">Design only</span>See <code>docs/GOVERNANCE.md</code></td></tr>
+          <tr><th scope="row">Eval scores</th><td><span class="st no">Fixture</span>Read from a JSON file; no eval harness is included</td></tr>
+          <tr><th scope="row">Any customer or employer system</th><td><span class="st no">Not touched</span>Not touched</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Also from the README: the mock server trusts <code>X-Tenant-ID</code> and has no auth, so do not expose it. The status column mirrors the repository README; the colored labels are a reading aid.</p>
+  </section>
+
+</div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>MIT licensed. Source and license on <a href="https://github.com/gerardrecinto/ai-delivery-observability-kit">GitHub</a>.</span>
+    <span><a href="https://github.com/gerardrecinto/ai-delivery-observability-kit/blob/main/docs/GOVERNANCE.md">Governance</a> &middot; <a href="https://github.com/gerardrecinto/ai-delivery-observability-kit/blob/main/docs/COST_ATTRIBUTION.md">Cost attribution</a> &middot; <a href="https://github.com/gerardrecinto/ai-delivery-observability-kit/blob/main/SECURITY.md">Security</a></span>
+  </div>
+</footer>
+<script src="./app.js" defer></script>
+</body>
+</html>
