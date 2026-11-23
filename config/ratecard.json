@@ -1,0 +1,6 @@
+{
+  "default": {"prompt_per_1k": 0.0005, "completion_per_1k": 0.0015, "gpu_second": 0.0004},
+  "models": {
+    "mock-large": {"prompt_per_1k": 0.002, "completion_per_1k": 0.006, "gpu_second": 0.001}
+  }
+}
