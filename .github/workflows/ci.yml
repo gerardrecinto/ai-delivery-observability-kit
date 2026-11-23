@@ -1,0 +1,106 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[server,dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy src
+      - run: pytest -q
+
+  config-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: promtool check rules
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/deploy/prometheus:/p:ro" \
+            prom/prometheus:v2.55.1 check rules /p/alerts.yaml
+      - name: otelcol validate
+        run: |
+          I=otel/opentelemetry-collector-contrib:0.116.1
+          docker run --rm -v "$PWD/otel:/c:ro" $I validate --config=/c/collector.yaml
+          docker run --rm -v "$PWD/otel:/c:ro" $I validate --config=/c/collector.yaml --config=/c/overlay-kafka.yaml
+          docker run --rm -v "$PWD/otel:/c:ro" $I validate --config=/c/collector.yaml --config=/c/overlay-local.yaml
+      - name: envoy validate
+        run: |
+          docker run --rm -v "$PWD/deploy/envoy:/e:ro" envoyproxy/envoy:v1.32.3 \
+            --mode validate -c /e/envoy.yaml
+      - name: helm lint and template
+        run: |
+          helm lint deploy/helm/vllm-serving
+          helm template r deploy/helm/vllm-serving > rendered.yaml
+      - name: kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          ./kubeconform -strict -summary rendered.yaml deploy/opencost/tenant-namespace.yaml
+          ./kubeconform -strict -summary \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            deploy/argo/*.yaml
+      - name: grafana dashboard is valid JSON
+        run: python3 -m json.tool deploy/grafana/dashboards/ai-delivery.json > /dev/null
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d --build
+      - name: send a request and look for the metric in Prometheus
+        run: |
+          for i in $(seq 1 30); do curl -sf localhost:8000/healthz && break; sleep 2; done
+          curl -sf localhost:8000/v1/chat/completions -H 'X-Tenant-ID: ci' \
+            -H 'content-type: application/json' \
+            -d '{"model":"mock-model","messages":[{"role":"user","content":"hi"}]}'
+          for i in $(seq 1 20); do
+            out=$(curl -s localhost:9090/api/v1/query --data-urlencode 'query=aidelivery_requests_total{tenant="ci"}')
+            echo "$out" | grep -q '"tenant":"ci"' && echo "$out" && exit 0
+            sleep 3
+          done
+          docker compose logs
+          exit 1
+      - if: always()
+        run: docker compose down -v
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan (vulnerabilities, secrets, misconfiguration)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Trivy config scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: SBOM (CycloneDX)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          format: cyclonedx
+          output: sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json

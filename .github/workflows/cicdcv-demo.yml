@@ -1,0 +1,17 @@
+name: cicdcv-demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      canary-error-rate:
+        description: Set to 0.5 to watch the gate choose rollback
+        default: "0"
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    uses: ./.github/workflows/cicdcv.yml
+    with:
+      canary-error-rate: ${{ inputs.canary-error-rate }}

@@ -20,6 +20,13 @@ spec:
         prometheus.io/path: /metrics
       {{- end }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -38,9 +45,16 @@ spec:
             {{- range .Values.extraArgs }}
             - {{ . }}
             {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: HF_HUB_OFFLINE
               value: "1"
+            - name: HOME
+              value: /tmp
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -64,7 +78,11 @@ spec:
               readOnly: true
             - name: shm
               mountPath: /dev/shm
+            - name: tmp
+              mountPath: /tmp
       volumes:
+        - name: tmp
+          emptyDir: {}
         - name: models
           persistentVolumeClaim:
             claimName: {{ .Values.modelsVolume.existingClaim }}

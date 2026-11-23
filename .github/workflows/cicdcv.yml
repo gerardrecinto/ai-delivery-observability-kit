@@ -1,0 +1,90 @@
+# Reusable build, test, canary-verify, release, rollback flow for an inference service.
+# Nothing here deploys anywhere: "release" and "rollback" print and package what a real
+# pipeline would do (for example promote or abort an Argo Rollout).
+name: cicdcv
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: Image name to build (not pushed)
+        type: string
+        default: aidelivery-mock
+      canary-error-rate:
+        description: Error rate injected into the stand-in canary, 0 is healthy
+        type: string
+        default: "0"
+    outputs:
+      decision:
+        description: promote or rollback
+        value: ${{ jobs.canary-verify.outputs.decision }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t ${{ inputs.image-name }}:${{ github.sha }} .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[server,dev]"
+      - run: pytest -q
+
+  canary-verify:
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    outputs:
+      decision: ${{ steps.decide.outputs.decision }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[server]"
+      - name: Run the gate against a stand-in canary
+        id: gate
+        continue-on-error: true
+        run: scripts/canary_smoke.sh "${{ inputs.canary-error-rate }}" | tee gate.txt
+      - name: Record the decision
+        id: decide
+        run: |
+          if [ "${{ steps.gate.outcome }}" = "success" ]; then
+            echo "decision=promote" >> "$GITHUB_OUTPUT"
+          else
+            echo "decision=rollback" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gate-report
+          path: gate.txt
+
+  release:
+    needs: canary-verify
+    if: needs.canary-verify.outputs.decision == 'promote'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "Gate passed. A real pipeline would now run:"
+          echo "  kubectl argo rollouts promote vllm"
+          echo "(not executed: this workflow has no cluster access)"
+
+  rollback:
+    needs: canary-verify
+    if: needs.canary-verify.outputs.decision == 'rollback'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "Gate failed. A real pipeline would now run:"
+          echo "  kubectl argo rollouts abort vllm"
+          echo "(not executed: this workflow has no cluster access)"

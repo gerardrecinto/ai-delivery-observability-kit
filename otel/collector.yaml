@@ -38,6 +38,11 @@ processors:
     limit_percentage: 75
     spike_limit_percentage: 20
 
+  # Step 0 (traces): the mock server sets tenant.id on spans, not on the resource. This moves
+  # span-level tenant.id up to the resource so the later steps and spanmetrics see it.
+  groupbyattrs/tenant:
+    keys: [tenant.id]
+
   # Step 1: copy the tenant header onto the resource. `insert` never overwrites an
   # attribute the client already set.
   resource/tenant_from_header:
@@ -126,6 +131,7 @@ service:
       receivers: [otlp]
       processors:
         - memory_limiter
+        - groupbyattrs/tenant
         - resource/tenant_from_header
         - transform/tenant_default
         - filter/drop_health

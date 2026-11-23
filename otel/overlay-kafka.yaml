@@ -5,7 +5,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resource/tenant_from_header, transform/tenant_default, filter/drop_health, batch]
+      processors: [memory_limiter, groupbyattrs/tenant, resource/tenant_from_header, transform/tenant_default, filter/drop_health, batch]
       exporters: [otlp/tempo, spanmetrics, kafka/traces]
     metrics:
       receivers: [otlp, prometheus/dcgm, spanmetrics]

@@ -98,9 +98,9 @@ def create_app(
         words = CANNED.split()
         cid = f"chatcmpl-{uuid.uuid4().hex[:12]}"
 
-        def finish(first_token_at: float | None) -> None:
+        def finish(first_token_at: float | None, completion_tokens: int = len(words)) -> None:
             elapsed = time.perf_counter() - start
-            cost.record(Usage(tenant, model, prompt_tokens, len(words), elapsed))
+            cost.record(Usage(tenant, model, prompt_tokens, completion_tokens, elapsed))
             metrics.requests.labels(tenant, model, "200").inc()
             metrics.duration.labels(tenant, model).observe(elapsed)
             if first_token_at is not None:
@@ -132,31 +132,36 @@ def create_app(
 
         async def sse() -> AsyncIterator[str]:
             first: float | None = None
-            with tracer.start_as_current_span("mock.generate_stream") as span:
-                span.set_attribute("tenant.id", tenant)
-                span.set_attribute("gen_ai.request.model", model)
-                for i, w in enumerate(words):
-                    await asyncio.sleep(delay)
-                    if first is None:
-                        first = time.perf_counter()
-                    chunk = {
-                        "id": cid,
-                        "object": "chat.completion.chunk",
-                        "model": model,
-                        "choices": [
-                            {"index": 0, "delta": {"content": w + " "}, "finish_reason": None}
-                        ],
-                    }
-                    yield f"data: {json.dumps(chunk)}\n\n"
-                    if i == len(words) - 1:
-                        done = {
+            sent = 0
+            try:
+                with tracer.start_as_current_span("mock.generate_stream") as span:
+                    span.set_attribute("tenant.id", tenant)
+                    span.set_attribute("gen_ai.request.model", model)
+                    for i, w in enumerate(words):
+                        await asyncio.sleep(delay)
+                        if first is None:
+                            first = time.perf_counter()
+                        chunk = {
                             "id": cid,
                             "object": "chat.completion.chunk",
                             "model": model,
-                            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                            "choices": [
+                                {"index": 0, "delta": {"content": w + " "}, "finish_reason": None}
+                            ],
                         }
-                        yield f"data: {json.dumps(done)}\n\n"
-            finish(first)
+                        sent += 1
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                        if i == len(words) - 1:
+                            done = {
+                                "id": cid,
+                                "object": "chat.completion.chunk",
+                                "model": model,
+                                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                            }
+                            yield f"data: {json.dumps(done)}\n\n"
+            finally:
+                # Runs on client disconnect too, so partial generations are still billed.
+                finish(first, sent)
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(

@@ -64,3 +64,4 @@ def test_budget_exhaustion_returns_429() -> None:
 @pytest.mark.parametrize("path", ["/healthz"])
 def test_health(path: str) -> None:
     assert client().get(path).json()["mode"] == "mock"
+
