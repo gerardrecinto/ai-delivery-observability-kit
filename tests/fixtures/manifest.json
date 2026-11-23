@@ -1,0 +1,6 @@
+[
+  {"name": "org/model-a", "license": "apache-2.0"},
+  {"name": "org/model-b", "license": "mit"},
+  {"name": "org/model-c", "license": "cc-by-nc-4.0"},
+  {"name": "org/model-d", "license": ""}
+]

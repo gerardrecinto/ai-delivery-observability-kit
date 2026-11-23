@@ -1,0 +1,14 @@
+# HELP aidelivery_requests_total Requests
+# TYPE aidelivery_requests_total counter
+aidelivery_requests_total{tenant="acme",model="m",status="200"} 100.0
+# TYPE aidelivery_request_duration_seconds histogram
+aidelivery_request_duration_seconds_bucket{tenant="acme",model="m",le="0.05"} 10.0
+aidelivery_request_duration_seconds_bucket{tenant="acme",model="m",le="0.1"} 50.0
+aidelivery_request_duration_seconds_bucket{tenant="acme",model="m",le="0.25"} 90.0
+aidelivery_request_duration_seconds_bucket{tenant="acme",model="m",le="0.5"} 100.0
+aidelivery_request_duration_seconds_bucket{tenant="acme",model="m",le="1.0"} 100.0
+aidelivery_request_duration_seconds_bucket{tenant="acme",model="m",le="+Inf"} 100.0
+aidelivery_request_duration_seconds_count{tenant="acme",model="m"} 100.0
+aidelivery_tokens_total{tenant="acme",model="m",type="prompt"} 4000.0
+aidelivery_tokens_total{tenant="acme",model="m",type="completion"} 6000.0
+aidelivery_cost_usd_total{tenant="acme",model="m"} 0.02

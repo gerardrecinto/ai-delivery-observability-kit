@@ -1,0 +1,8 @@
+{
+  "max_p95_latency_seconds": 2.0,
+  "max_error_rate": 0.02,
+  "max_cost_per_1k_tokens": 0.01,
+  "min_eval_score": 0.85,
+  "max_hallucination_rate": 0.05,
+  "min_requests": 20
+}
