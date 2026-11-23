@@ -79,27 +79,22 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    env:
+      TRIVY: aquasec/trivy:0.57.1
     steps:
       - uses: actions/checkout@v4
       - name: Trivy filesystem scan (vulnerabilities, secrets, misconfiguration)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: fs
-          scanners: vuln,secret,misconfig
-          severity: HIGH,CRITICAL
-          exit-code: "1"
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src $TRIVY fs \
+            --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --exit-code 1 .
       - name: Trivy config scan
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: config
-          severity: HIGH,CRITICAL
-          exit-code: "1"
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src $TRIVY config \
+            --severity HIGH,CRITICAL --exit-code 1 .
       - name: SBOM (CycloneDX)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: fs
-          format: cyclonedx
-          output: sbom.cdx.json
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src $TRIVY fs \
+            --format cyclonedx --output sbom.cdx.json .
       - uses: actions/upload-artifact@v4
         with:
           name: sbom-cyclonedx
