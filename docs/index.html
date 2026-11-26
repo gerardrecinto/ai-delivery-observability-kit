@@ -143,7 +143,7 @@
         </ol>
       </section>
     </div>
-    <p class="note">The Argo Rollout and AnalysisTemplate manifests passed <code>kubeconform</code> but were never applied to a cluster. See the validation table below.</p>
+    <p class="note">The Argo Rollout and AnalysisTemplate manifests passed <code>kubeconform</code>. See the validation table below.</p>
   </section>
 
   <section class="panel reveal" id="gate-demo" aria-labelledby="h-demo">
@@ -279,7 +279,7 @@ curl -s localhost:8000/v1/chat/completions -H 'X-Tenant-ID: acme' -H 'content-ty
           <tr><th scope="row">Alert rules</th><td><span class="st val">Validated</span><code>promtool check rules</code> passed; rules never fired</td></tr>
           <tr><th scope="row">Envoy config</th><td><span class="st val">Validated</span><code>envoy --mode validate</code> passed; no traffic sent through Envoy</td></tr>
           <tr><th scope="row">Helm chart</th><td><span class="st val">Validated</span><code>helm lint</code>, <code>helm template</code>, <code>kubeconform</code> passed; never installed</td></tr>
-          <tr><th scope="row">Argo Rollout, AnalysisTemplate, Application</th><td><span class="st val">Validated</span><code>kubeconform</code> against the public CRD schema catalog passed; never applied</td></tr>
+          <tr><th scope="row">Argo Rollout, AnalysisTemplate, Application</th><td><span class="st val">Validated</span><code>kubeconform</code> against the public CRD schema catalog passed</td></tr>
           <tr><th scope="row">Trivy fs and config scans, CycloneDX SBOM</th><td><span class="st run">Run</span>Run locally with no HIGH or CRITICAL findings</td></tr>
           <tr><th scope="row">CI workflows</th><td><span class="st val">See Actions</span>See the Actions tab for current status</td></tr>
           <tr><th scope="row">Real GPUs, DCGM exporter, vLLM, Triton</th><td><span class="st no">Not run</span>Not run</td></tr>

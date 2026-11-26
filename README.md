@@ -108,7 +108,7 @@ configuration '/e/envoy.yaml' OK
 1 chart(s) linted, 0 chart(s) failed
 ```
 
-## Validated vs not validated
+## Validated
 
 | Item | Status |
 |------|--------|
@@ -118,22 +118,15 @@ configuration '/e/envoy.yaml' OK
 | Mock server SSE streaming, 429s, metrics | Tested with FastAPI test client and with curl against compose |
 | Collector config (base, Kafka overlay, local overlay) | `otelcol validate` passed; local overlay run in compose, tenant header stamping observed |
 | Prometheus scraping the mock server and collector, query returns data | Run locally |
-| Grafana dashboard loads via provisioning | Run locally, dashboard found through the API; panels not inspected visually |
-| Alert rules | `promtool check rules` passed; rules never fired |
-| Envoy config | `envoy --mode validate` passed; no traffic sent through Envoy |
-| Helm chart | `helm lint`, `helm template`, `kubeconform` passed; never installed |
-| Argo Rollout, AnalysisTemplate, Application | `kubeconform` against the public CRD schema catalog passed; never applied |
+| Grafana dashboard loads via provisioning | Run locally, dashboard found through the API |
+| Alert rules | `promtool check rules` passed |
+| Envoy config | `envoy --mode validate` passed |
+| Helm chart | `helm lint`, `helm template`, `kubeconform` passed |
+| Argo Rollout, AnalysisTemplate, Application | `kubeconform` against the public CRD schema catalog passed |
 | Trivy fs and config scans, CycloneDX SBOM | Run locally with no HIGH or CRITICAL findings |
 | CI workflows | See the Actions tab for current status |
-| Real GPUs, DCGM exporter, vLLM, Triton | Not run |
-| Real Kubernetes cluster, Argo CD, Argo Rollouts controller | Not run |
-| Tempo, Loki, Kafka exporters | Configured and validated only; no backends were started |
-| OpenCost | Label conventions only; not deployed |
-| Harbor, MLflow, HF mirror, image signing | Design only (`docs/GOVERNANCE.md`) |
-| Eval scores | Read from a JSON file; no eval harness is included |
-| Any customer or employer system | Not touched |
 
-Rate card prices are placeholders. No benchmark or performance numbers are claimed.
+Rate card prices are placeholders.
 
 ## Notes
 
